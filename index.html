@@ -1,0 +1,280 @@
+<html>
+
+<head>
+    <title>地域メッシュマップ（PMTiles）</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.10.0/dist/index.js"></script>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.2.0/dist/maplibre-gl-geocoder.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.2.0/dist/maplibre-gl-geocoder.css"
+        type="text/css" />
+    <script type="text/javascript">
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // 2次メッシュ
+        let PM_2jimesh_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/mesh2.pmtiles";
+
+        // 2次メッシュ重心
+        let PM_2jimesh_centroid_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/mesh2_point.pmtiles";
+
+        // 3次メッシュ
+        let PM_3jimesh_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh3R_mergefile.pmtiles";
+
+        // 3次メッシュ重心
+        let PM_3jimesh_centroid_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh3R_mergefile_point.pmtiles";
+
+        /*
+        // 4次メッシュ
+        let PM_4jimesh_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh4R_mergefile.pmtiles";
+
+        // 4次メッシュ重心
+        let PM_4jimesh_centroid_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh4R_mergefile_point.pmtiles";
+
+        // 5次メッシュ
+        let PM_5jimesh_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh5R_mergefile.pmtiles";
+
+        // 5次メッシュ重心
+        let PM_5jimesh_centroid_URL = "https://xs489works.xsrv.jp/pmtiles-data/e-stat/Mesh5R_mergefile_point.pmtiles";
+        */
+
+        const p20 = new pmtiles.PMTiles(PM_2jimesh_URL)
+        const p21 = new pmtiles.PMTiles(PM_2jimesh_centroid_URL)
+        const p30 = new pmtiles.PMTiles(PM_3jimesh_URL)
+        const p31 = new pmtiles.PMTiles(PM_3jimesh_centroid_URL)
+        /*
+        const p40 = new pmtiles.PMTiles(PM_4jimesh_URL)
+        const p41 = new pmtiles.PMTiles(PM_4jimesh_centroid_URL)
+        const p50 = new pmtiles.PMTiles(PM_5jimesh_URL)
+        const p51 = new pmtiles.PMTiles(PM_5jimesh_centroid_URL)
+        */
+
+        protocol.add(p20);
+        protocol.add(p21);
+        protocol.add(p30);
+        protocol.add(p31);
+        /*
+        protocol.add(p40);
+        protocol.add(p41);
+        protocol.add(p50);
+        protocol.add(p51);
+        */
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://tile2.openstreetmap.jp/styles/osm-bright-ja/style.json',
+            zoom: 8.62,
+            minZoom: 1,
+            maxZoom: 23,
+            pitch: 0,
+            center: [139.8054, 35.5554],
+            hash: true,
+            attributionControl: false
+        });
+
+        // ジオコーダー追加
+        var geocoder_api = {
+            forwardGeocode: async (config) => {
+                const features = [];
+                try {
+                    let request =
+                        'https://nominatim.openstreetmap.org/search?q=' +
+                        config.query +
+                        '&format=geojson&polygon_geojson=1&addressdetails=1';
+                    const response = await fetch(request);
+                    console.log(response)
+                    const geojson = await response.json();
+                    for (let feature of geojson.features) {
+                        let center = [
+                            feature.bbox[0] +
+                            (feature.bbox[2] - feature.bbox[0]) / 2,
+                            feature.bbox[1] +
+                            (feature.bbox[3] - feature.bbox[1]) / 2
+                        ];
+                        let point = {
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: center
+                            },
+                            place_name: feature.properties.display_name,
+                            properties: feature.properties,
+                            text: feature.properties.display_name,
+                            place_type: ['place'],
+                            center: center
+                        };
+                        features.push(point);
+                    }
+                } catch (e) {
+                    console.error(`Failed to forwardGeocode with error: ${e}`);
+                }
+
+                return {
+                    features: features
+                };
+            }
+        };
+
+        map.addControl(
+            new MaplibreGeocoder(geocoder_api, {
+                maplibregl: maplibregl
+            }), 'top-left');
+
+        // ズーム・回転
+        map.addControl(new maplibregl.NavigationControl());
+
+        // フルスクリーンモードのオンオフ
+        map.addControl(new maplibregl.FullscreenControl());
+
+        // 現在位置表示
+        map.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }));
+
+        // スケール表示
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        // Attributionを折りたたみ表示
+        map.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '（<a href="https://twitter.com/shi__works" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/ksj-land-use-zone-map-on-maplibre-gl-js" target="_blank">Github</a>） '
+        }));
+
+        var hoveredStateId = null;
+
+        map.on('load', () => {
+            // 2次メッシュソース
+            map.addSource("pmtiles-2jimesh", {
+                type: "vector",
+                url: "pmtiles://" + PM_2jimesh_URL,
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/biodic-mesh">生物多様性センター 2次メッシュ</a>'
+            });
+
+            // 2次メッシュラインレイヤ
+            map.addLayer({
+                "id": '2jimesh-line',
+                "type": "line",
+                "source": "pmtiles-2jimesh",
+                "source-layer": "mesh2fgb",
+                minzoom: 8,
+                maxzoom: 12,
+                "paint": {
+                    "line-color": "rgb(0, 0, 0)",
+                    'line-width': 1.5,
+                    'line-opacity': 1.0,
+                },
+            });
+
+            // 2次メッシュ重心ソース
+            map.addSource("pmtiles-2jimesh-centorid", {
+                type: "vector",
+                url: "pmtiles://" + PM_2jimesh_centroid_URL,
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/biodic-mesh">生物多様性センター 2次メッシュ</a>'
+            });
+
+            // 2次メッシュ重心ラベルレイヤ
+            map.addLayer({
+                'id': '2jimesh-centorid-label',
+                'type': 'symbol',
+                'source': 'pmtiles-2jimesh-centorid',
+                "source-layer": "mesh2_pointfgb",
+                minzoom: 8,
+                maxzoom: 12,
+                'layout': {
+                    'text-field': ['concat', ['to-string', ['get', 'NAME']]],
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-size': 16,
+                    'text-anchor': 'center',
+                    'text-justify': 'center',
+                    'symbol-placement': 'point',
+                },
+                'paint': {
+                    'text-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-width': 1
+                }
+            });
+
+            // 3次メッシュソース
+            map.addSource("pmtiles-3jimesh", {
+                type: "vector",
+                url: "pmtiles://" + PM_3jimesh_URL,
+                attribution: '<a href="https://www.e-stat.go.jp/">政府統計の総合窓口（e-Stat） 3次メッシュ</a>'
+            });
+
+            // 3次メッシュラインレイヤ
+            map.addLayer({
+                "id": '3jimesh-line',
+                "type": "line",
+                "source": "pmtiles-3jimesh",
+                "source-layer": "Mesh3R_mergefilefgb",
+                minzoom: 12,
+                maxzoom: 18,
+                "paint": {
+                    "line-color": "rgb(0, 0, 0)",
+                    'line-width': 1.5,
+                    'line-opacity': 1.0,
+                },
+            });
+
+            // 3次メッシュ重心ソース
+            map.addSource("pmtiles-3jimesh-centorid", {
+                type: "vector",
+                url: "pmtiles://" + PM_3jimesh_centroid_URL,
+                attribution: '<a href="https://www.e-stat.go.jp/">政府統計の総合窓口（e-Stat） 3次メッシュ</a>'
+            });
+
+            // 3次メッシュ重心ラベルレイヤ
+            map.addLayer({
+                'id': '3jimesh-centorid-label',
+                'type': 'symbol',
+                'source': 'pmtiles-3jimesh-centorid',
+                "source-layer": "Mesh3R_mergefile_pointfgb",
+                minzoom: 12,
+                maxzoom: 18,
+                'layout': {
+                    'text-field': ['concat', ['to-string', ['get', 'KEY_CODE']]],
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-size': 16,
+                    'text-anchor': 'center',
+                    'text-justify': 'center',
+                    'symbol-placement': 'point',
+                },
+                'paint': {
+                    'text-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-width': 1
+                }
+            });
+
+            map.showTileBoundaries = false;
+
+        });
+    </script>
+</body>
+
+</html>
